@@ -95,6 +95,9 @@ class SignaturePathV2 : public SignaturePath
             override;
 
   public:
+    void calculatePrefetch(const PrefetchInfo &pfi,
+                           std::vector<AddrPriority> &addresses) override;
+
     SignaturePathV2(const SignaturePathPrefetcherV2Params &p);
     ~SignaturePathV2() = default;
 };

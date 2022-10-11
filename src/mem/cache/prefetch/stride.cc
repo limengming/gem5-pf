@@ -64,7 +64,7 @@ GEM5_DEPRECATED_NAMESPACE(Prefetcher, prefetch);
 namespace prefetch
 {
 
-Stride::StrideEntry::StrideEntry(const SatCounter8& init_confidence)
+Stride::StrideEntry::StrideEntry(int init_confidence)
   : TaggedEntry(), confidence(init_confidence)
 {
     invalidate();
@@ -76,17 +76,20 @@ Stride::StrideEntry::invalidate()
     TaggedEntry::invalidate();
     lastAddr = 0;
     stride = 0;
-    confidence.reset();
+    confidence = 0;
 }
 
 Stride::Stride(const StridePrefetcherParams &p)
   : Queued(p),
-    initConfidence(p.confidence_counter_bits, p.initial_confidence),
-    threshConf(p.confidence_threshold/100.0),
+    initConfidence(p.initial_confidence),
+    threshConf(p.confidence_threshold),
     useRequestorId(p.use_requestor_id),
-    degree(p.degree),
+    maxDegree(p.degree),
     pcTableInfo(p.table_assoc, p.table_entries, p.table_indexing_policy,
-        p.table_replacement_policy)
+        p.table_replacement_policy),
+    filled(0),
+    adjustInterval(p.adjust_interval),
+    currentDegree(2)
 {
 }
 
@@ -128,9 +131,12 @@ Stride::calculatePrefetch(const PrefetchInfo &pfi,
 
     // Get required packet info
     Addr pf_addr = pfi.getAddr();
+    Addr line_addr = pf_addr >> lBlkSize;
     Addr pc = pfi.getPC();
     bool is_secure = pfi.isSecure();
     RequestorID requestor_id = useRequestorId ? pfi.getRequestorId() : 0;
+
+
 
     // Get corresponding pc table
     PCTable* pcTable = findTable(requestor_id);
@@ -142,17 +148,20 @@ Stride::calculatePrefetch(const PrefetchInfo &pfi,
         pcTable->accessEntry(entry);
 
         // Hit in table
-        int new_stride = pf_addr - entry->lastAddr;
+        int new_stride = line_addr - entry->lastAddr;
         bool stride_match = (new_stride == entry->stride);
 
         // Adjust confidence for stride entry
         if (stride_match && new_stride != 0) {
-            entry->confidence++;
+            if (entry->confidence < threshConf) {
+                entry->confidence++;
+            }
         } else {
-            entry->confidence--;
-            // If confidence has dropped below the threshold, train new stride
-            if (entry->confidence.calcSaturation() < threshConf) {
+            if (entry->confidence == 0) {
                 entry->stride = new_stride;
+            }
+            else {
+                entry->confidence--;
             }
         }
 
@@ -161,23 +170,21 @@ Stride::calculatePrefetch(const PrefetchInfo &pfi,
                 new_stride, stride_match ? "match" : "change",
                 (int)entry->confidence);
 
-        entry->lastAddr = pf_addr;
+        entry->lastAddr = line_addr;
 
         // Abort prefetch generation if below confidence threshold
-        if (entry->confidence.calcSaturation() < threshConf) {
+        if (entry->confidence < threshConf) {
             return;
         }
 
         // Generate up to degree prefetches
-        for (int d = 1; d <= degree; d++) {
+        for (int d = 1; d <= currentDegree; d++) {
             // Round strides up to atleast 1 cacheline
             int prefetch_stride = new_stride;
-            if (abs(new_stride) < blkSize) {
-                prefetch_stride = (new_stride < 0) ? -blkSize : blkSize;
-            }
 
-            Addr new_addr = pf_addr + d * prefetch_stride;
-            addresses.push_back(AddrPriority(new_addr, 0));
+            Addr new_addr = (line_addr + prefetch_stride * d) << lBlkSize;
+            if (samePage(pf_addr, new_addr))
+                addresses.push_back(AddrPriority(new_addr, 0));
         }
     } else {
         // Miss in table
@@ -187,10 +194,31 @@ Stride::calculatePrefetch(const PrefetchInfo &pfi,
         StrideEntry* entry = pcTable->findVictim(pc);
 
         // Insert new entry's data
-        entry->lastAddr = pf_addr;
+        entry->lastAddr = line_addr;
         pcTable->insertEntry(pc, is_secure, entry);
     }
 }
+
+void
+Stride::notifyFill(const PacketPtr& pkt)
+{
+    // Only insert into the RR right way if it's the pkt is a HWP
+    if (!pkt->cmd.isHWPrefetch()) return;
+
+    filled++;
+    if (filled >= adjustInterval) {
+        double accuracy = (double) usefulPrefetches / issuedPrefetches;
+        if (accuracy > 0.5 && currentDegree < maxDegree) {
+            currentDegree++;
+        }
+        else if (accuracy < 0.2 && currentDegree > 1) {
+            currentDegree--;
+        }
+        filled = 0;
+    }
+}
+
+
 
 uint32_t
 StridePrefetcherHashedSetAssociative::extractSet(const Addr pc) const

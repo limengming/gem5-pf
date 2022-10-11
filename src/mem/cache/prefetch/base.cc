@@ -63,7 +63,8 @@ Base::PrefetchInfo::PrefetchInfo(PacketPtr pkt, Addr addr, bool miss)
   : address(addr), pc(pkt->req->hasPC() ? pkt->req->getPC() : 0),
     requestorId(pkt->req->requestorId()), validPC(pkt->req->hasPC()),
     secure(pkt->isSecure()), size(pkt->req->getSize()), write(pkt->isWrite()),
-    paddress(pkt->req->getPaddr()), cacheMiss(miss)
+    paddress(pkt->req->getPaddr()), cacheMiss(miss),
+    iside(pkt->req->isInstFetch())
 {
     unsigned int req_size = pkt->req->getSize();
     if (!write && miss) {
@@ -163,6 +164,8 @@ Base::observeAccess(const PacketPtr &pkt, bool miss) const
     bool fetch = pkt->req->isInstFetch();
     bool read = pkt->isRead();
     bool inv = pkt->isInvalidate();
+
+    //if (pkt->req->isPrefetch()) return false;
 
     if (!miss) {
         if (prefetchOnPfHit)

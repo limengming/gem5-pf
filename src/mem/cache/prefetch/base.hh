@@ -116,6 +116,8 @@ class Base : public ClockedObject
         bool cacheMiss;
         /** Pointer to the associated request data */
         uint8_t *data;
+        /** Whether this event comes from icache */
+        bool iside;
 
       public:
         /**
@@ -181,6 +183,16 @@ class Base : public ClockedObject
         bool isWrite() const
         {
             return write;
+        }
+
+        /**
+         * Checks if the request that caused this prefetch event was
+         * from the icache
+         * @return true if the request causing this event is from the icache
+         */
+        bool isInstFetch() const
+        {
+            return iside;
         }
 
         /**

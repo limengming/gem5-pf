@@ -124,9 +124,10 @@ def config_cache(options, system):
         system.tol2bus = L2XBar(clk_domain = system.cpu_clk_domain, width=256)
         system.l2.cpu_side = system.tol2bus.mem_side_ports
 
+        #tags=BaseSetAssoc(indexing_policy=SkewedAssociative())
         if options.l3cache:
           system.l3 = L3Cache(clk_domain=system.cpu_clk_domain,
-                                     **_get_cache_opts('l3', options))
+                        **_get_cache_opts('l3', options))
 
           # l2 -> tol3bus -> l3
           system.tol3bus = L2XBar(clk_domain=system.cpu_clk_domain, width=256)

@@ -113,13 +113,6 @@ class BasePrefetcher(ClockedObject):
             raise TypeError("argument must be a SimObject type")
         self._tlbs.append(simObj)
 
-class MultiPrefetcher(BasePrefetcher):
-    type = 'MultiPrefetcher'
-    cxx_class = 'gem5::prefetch::Multi'
-    cxx_header = 'mem/cache/prefetch/multi.hh'
-
-    prefetchers = VectorParam.BasePrefetcher([], "Array of prefetchers")
-
 class QueuedPrefetcher(BasePrefetcher):
     type = "QueuedPrefetcher"
     abstract = True
@@ -159,17 +152,20 @@ class StridePrefetcher(QueuedPrefetcher):
 
     # Do not consult stride prefetcher on instruction accesses
     on_inst = False
+    prefetch_on_pf_hit = True
 
     confidence_counter_bits = Param.Unsigned(3,
         "Number of bits of the confidence counter")
-    initial_confidence = Param.Unsigned(4,
+    initial_confidence = Param.Unsigned(0,
         "Starting confidence of new entries")
-    confidence_threshold = Param.Percent(50,
+    confidence_threshold = Param.Unsigned(2,
         "Prefetch generation confidence threshold")
 
-    use_requestor_id = Param.Bool(True, "Use requestor id based history")
+    use_requestor_id = Param.Bool(False, "Use requestor id based history")
 
-    degree = Param.Int(4, "Number of prefetches to generate")
+    degree = Param.Int(3, "Number of prefetches to generate")
+    adjust_interval = Param.Unsigned(256,
+        "epoch for adjusting prefetching degree")
 
     table_assoc = Param.Int(4, "Associativity of the PC table")
     table_entries = Param.MemorySize("64", "Number of entries of the PC table")
@@ -177,8 +173,60 @@ class StridePrefetcher(QueuedPrefetcher):
         StridePrefetcherHashedSetAssociative(entry_size = 1,
         assoc = Parent.table_assoc, size = Parent.table_entries),
         "Indexing policy of the PC table")
-    table_replacement_policy = Param.BaseReplacementPolicy(RandomRP(),
+    table_replacement_policy = Param.BaseReplacementPolicy(LRURP(),
         "Replacement policy of the PC table")
+
+class IPCPPrefetcherHashedSetAssociative(SetAssociative):
+    type = 'IPCPPrefetcherHashedSetAssociative'
+    cxx_class = 'gem5::prefetch::IPCPPrefetcherHashedSetAssociative'
+    cxx_header = "mem/cache/prefetch/ipcp.hh"
+
+class IPCPPrefetcher(QueuedPrefetcher):
+    type = 'IPCPPrefetcher'
+    cxx_class = 'gem5::prefetch::IPCP'
+    cxx_header = "mem/cache/prefetch/ipcp.hh"
+
+    # Do not consult stride prefetcher on instruction accesses
+    on_inst = False
+    prefetch_on_pf_hit = True
+
+    confidence_counter_bits = Param.Unsigned(3,
+        "Number of bits of the confidence counter")
+    initial_confidence = Param.Unsigned(0,
+        "Starting confidence of new entries")
+    confidence_threshold = Param.Unsigned(2,
+        "Prefetch generation confidence threshold")
+
+    use_requestor_id = Param.Bool(False, "Use requestor id based history")
+
+    degree = Param.Int(6, "Number of prefetches to generate")
+    degree_cs = Param.Int(3, "Number of prefetches to generate")
+
+    adjust_interval = Param.Unsigned(256,
+        "epoch for adjusting prefetching degree")
+
+    pn_count_bits = Param.Unsigned(6,
+        "Number of bits of the pn counter")
+
+    table_assoc = Param.Int(4, "Associativity of the PC table")
+    table_entries = Param.MemorySize("64", "Number of entries of the PC table")
+    table_indexing_policy = Param.BaseIndexingPolicy(
+        IPCPPrefetcherHashedSetAssociative(entry_size = 1,
+        assoc = Parent.table_assoc, size = Parent.table_entries),
+        "Indexing policy of the PC table")
+    table_replacement_policy = Param.BaseReplacementPolicy(LRURP(),
+        "Replacement policy of the PC table")
+
+    rst_assoc = Param.Int(8, "Associativity of the RST table")
+    rst_entries = Param.MemorySize("8", "Number of entries of the PC table")
+    rst_region_size = Param.Int(2048, "Number of entries per region")
+    rst_indexing_policy = Param.BaseIndexingPolicy(
+        SetAssociative(entry_size = Parent.rst_region_size,
+        assoc = Parent.rst_assoc,
+        size = Parent.rst_entries * Parent.rst_region_size),
+        "Indexing policy of the RST table")
+    rst_replacement_policy = Param.BaseReplacementPolicy(LRURP(),
+        "Replacement policy of the RST table")
 
 class TaggedPrefetcher(QueuedPrefetcher):
     type = 'TaggedPrefetcher'
@@ -262,6 +310,9 @@ class SignaturePathPrefetcher(QueuedPrefetcher):
     lookahead_confidence_threshold = Param.Float(0.75,
         "Minimum confidence to continue exploring lookahead entries")
 
+    prefetch_on_access = True
+    prefetch_on_pf_hit = True
+
 class SignaturePathPrefetcherV2(SignaturePathPrefetcher):
     type = 'SignaturePathPrefetcherV2'
     cxx_class = 'gem5::prefetch::SignaturePathV2'
@@ -284,6 +335,9 @@ class SignaturePathPrefetcherV2(SignaturePathPrefetcher):
         "Indexing policy of the global history register")
     global_history_register_replacement_policy = Param.BaseReplacementPolicy(
         LRURP(), "Replacement policy of the global history register")
+
+    prefetch_on_access = True
+    prefetch_on_pf_hit = True
 
 class AccessMapPatternMatching(ClockedObject):
     type = 'AccessMapPatternMatching'
@@ -445,6 +499,91 @@ class BOPPrefetcher(QueuedPrefetcher):
                 "Cycles to delay a write in the left RR table from the delay \
                 queue")
 
+class XiangshanPrefetcher(QueuedPrefetcher):
+    type = 'XiangshanPrefetcher'
+    cxx_class = 'gem5::prefetch::Xiangshan'
+    cxx_header = "mem/cache/prefetch/xiangshan.hh"
+    score_max = Param.Unsigned(31, "Max. \
+        score to update the best offset")
+    round_max = Param.Unsigned(50, "Max. \
+        round to update the best offset") #modified
+    bad_score = Param.Unsigned(1, "Score \
+        at which the HWP is disabled") #modified
+    rr_size = Param.Unsigned(256, "Number of entries for rrTable") #modified
+    tag_bits = Param.Unsigned(12, "Bits used to store the tag")
+
+    prefetch_on_pf_hit = True
+
+
+
+class SMSPrefetcher(QueuedPrefetcher):
+    type = "SMSPrefetcher"
+    cxx_class = 'gem5::prefetch::SMSPrefetcher'
+    cxx_header = 'mem/cache/prefetch/sms.hh'
+
+    use_virtual_addresses = True
+    region_size = Param.Int(1024, "region size")
+    # filter table (full-assoc)
+    filter_entries = Param.MemorySize("16", "num of filter table entries")
+    filter_indexing_policy = Param.BaseIndexingPolicy(
+        SetAssociative(
+            entry_size=1,
+            assoc=Parent.filter_entries,
+            size=Parent.filter_entries),
+        "Indexing policy of filter table"
+    )
+    filter_replacement_policy = Param.BaseReplacementPolicy(
+        FIFORP(),
+        "Replacement policy of filter table"
+    )
+    # active generation table (full-assoc)
+    act_entries = Param.MemorySize(
+        "16",
+        "num of active generation table entries"
+    )
+    act_indexing_policy = Param.BaseIndexingPolicy(
+        SetAssociative(
+            entry_size=1,
+            assoc=Parent.act_entries,
+            size=Parent.act_entries),
+        "Indexing policy of active generation table"
+    )
+    act_replacement_policy = Param.BaseReplacementPolicy(
+        LRURP(),
+        "Replacement policy of active generation table"
+    )
+    # pht table (set-assoc)
+    pht_entries = Param.MemorySize(
+        "64",
+        "num of pattern history table entries"
+    )
+    pht_assoc = Param.Int(2, "Associativity of the pattern history table")
+    pht_indexing_policy = Param.BaseIndexingPolicy(
+        SetAssociative(
+            entry_size=1,
+            assoc=Parent.pht_assoc,
+            size=Parent.pht_entries),
+        "Indexing policy of pattern history table"
+    )
+    pht_replacement_policy = Param.BaseReplacementPolicy(
+        LRURP(),
+        "Replacement policy of pattern history table"
+    )
+    # pf gen table (full-assoc)
+    # not implemented now, because queued prefetcher already had a filter
+    pf_gen_entries = Param.MemorySize("16", "num of pf_gen entries")
+    pf_gen_indexing_policy = Param.BaseIndexingPolicy(
+        SetAssociative(
+            entry_size=1,
+            assoc=Parent.pf_gen_entries,
+            size=Parent.pf_gen_entries),
+        "Indexing policy of pf_gen"
+    )
+    pf_gen_replacement_policy = Param.BaseReplacementPolicy(
+        LRURP(),
+        "Replacement policy of pf_gen"
+    )
+
 class SBOOEPrefetcher(QueuedPrefetcher):
     type = 'SBOOEPrefetcher'
     cxx_class = 'gem5::prefetch::SBOOE'
@@ -531,3 +670,11 @@ class PIFPrefetcher(QueuedPrefetcher):
         if not isinstance(simObj, SimObject):
             raise TypeError("argument must be of SimObject type")
         self.addEvent(HWPProbeEventRetiredInsts(self, simObj,"RetiredInstsPC"))
+
+class MultiPrefetcher(BasePrefetcher):
+    type = 'MultiPrefetcher'
+    cxx_class = 'gem5::prefetch::Multi'
+    cxx_header = 'mem/cache/prefetch/multi.hh'
+
+    prefetchers = VectorParam.BasePrefetcher([SignaturePathPrefetcher(),
+                    StreamPrefetcher()], "Array of prefetchers")

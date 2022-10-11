@@ -1,3 +1,9 @@
+spec06_rv64gc_o2_20m/
+test.log
+test
+script
+radl.tools
+radl.pe.tools
 build
 parser.out
 parsetab.py
@@ -8,6 +14,13 @@ cscope.out
 .*.swp
 .*.swo
 m5out
+src/mem/cache/prefetch/*.bak
+configs/common/*.bak
+src/cpu/o3/*.bak
+src/mem/cache/prefetch/stream.cc
+src/mem/cache/prefetch/stream.hh
+src/mem/cache/prefetch/stride.cc.bak.cc
+src/mem/cache/prefetch/stride.hh.bak.hh
 /src/doxygen/html
 /ext/dramsim2/DRAMSim2
 /ext/mcpat/regression/*/*.out

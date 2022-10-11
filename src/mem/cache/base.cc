@@ -459,7 +459,7 @@ BaseCache::recvTimingReq(PacketPtr pkt)
     if (satisfied) {
         // notify before anything else as later handleTimingReqHit might turn
         // the packet in a response
-        ppHit->notify(pkt);
+        //ppHit->notify(pkt);
 
         if (prefetcher && blk && blk->wasPrefetched()) {
             DPRINTF(Cache, "Hit on prefetch for addr %#x (%s)\n",
@@ -585,7 +585,7 @@ BaseCache::recvTimingResp(PacketPtr pkt)
             writeAllocator->allocate() : mshr->allocOnFill();
         blk = handleFill(pkt, blk, writebacks, allocate);
         assert(blk != nullptr);
-        ppFill->notify(pkt);
+        //ppFill->notify(pkt);
     }
 
     // Don't want to promote the Locked RMW Read until
@@ -1502,7 +1502,9 @@ BaseCache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
         }
 
         satisfyRequest(pkt, blk);
+        ppHit->notify(pkt);
         maintainClusivity(pkt->fromCache(), blk);
+
 
         return true;
     }

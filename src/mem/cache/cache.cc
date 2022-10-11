@@ -896,7 +896,7 @@ Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk)
           case MSHR::Target::FromPrefetcher:
             assert(tgt_pkt->cmd == MemCmd::HardPFReq);
             from_pref = true;
-
+            ppFill->notify(tgt_pkt);
             delete tgt_pkt;
             break;
 

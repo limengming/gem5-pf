@@ -64,6 +64,7 @@ Queued::DeferredPacket::createPkt(Addr paddr, unsigned blk_size,
     RequestPtr req = std::make_shared<Request>(paddr, blk_size,
                                                 0, requestor_id);
 
+    //req->setFlags(Request::PREFETCH);
     if (pfInfo.isSecure()) {
         req->setFlags(Request::SECURE);
     }
@@ -200,6 +201,7 @@ Queued::notify(const PacketPtr &pkt, const PrefetchInfo &pfi)
 
     // Get the maximu number of prefetches that we are allowed to generate
     size_t max_pfs = getMaxPermittedPrefetches(addresses.size());
+    statsQueued.pfCandidateHist.sample(addresses.size());
 
     // Queue up generated prefetches
     size_t num_pfs = 0;
@@ -232,6 +234,8 @@ Queued::notify(const PacketPtr &pkt, const PrefetchInfo &pfi)
             DPRINTF(HWPrefetch, "Ignoring page crossing prefetch.\n");
         }
     }
+
+    statsQueued.pfPrefetchDegreeHist.sample(num_pfs);
 }
 
 PacketPtr
@@ -278,8 +282,18 @@ Queued::QueuedStats::QueuedStats(statistics::Group *parent)
     ADD_STAT(pfSpanPage, statistics::units::Count::get(),
              "number of prefetches that crossed the page"),
     ADD_STAT(pfUsefulSpanPage, statistics::units::Count::get(),
-             "number of prefetches that is useful and crossed the page")
+             "number of prefetches that is useful and crossed the page"),
+    ADD_STAT(pfCandidateHist, statistics::units::Count::get(),
+             "number of candidate prefetches"),
+    ADD_STAT(pfPrefetchDegreeHist, statistics::units::Count::get(),
+             "number of prefetches that are truly issued")
 {
+    pfCandidateHist
+                .init(20)
+                .flags(gem5::statistics::pdf);
+    pfPrefetchDegreeHist
+                .init(20)
+                .flags(gem5::statistics::pdf);
 }
 
 

@@ -48,9 +48,9 @@ from m5.objects import *
 
 class L1Cache(Cache):
     assoc = 2
-    tag_latency = 2
-    data_latency = 2
-    response_latency = 2
+    tag_latency = 3
+    data_latency = 3
+    response_latency = 3
     mshrs = 4
     tgts_per_mshr = 20
 
@@ -62,28 +62,35 @@ class L1_ICache(L1Cache):
     data_latency = 1
     response_latency = 1
     mshrs = 2
+    replacement_policy = TreePLRURP()
+
 
 class L1_DCache(L1Cache):
-    tag_latency = 1
-    data_latency = 1
-    response_latency = 1
+    tag_latency = 3
+    data_latency = 3
+    response_latency = 2
     mshrs = 16
+    #writeback_clean = True
+    replacement_policy = TreePLRURP()
 
 class L2Cache(Cache):
-    tag_latency = 2
-    data_latency = 4
-    response_latency = 4
+    tag_latency = 5
+    data_latency = 5
+    response_latency = 60
     mshrs = 64
     tgts_per_mshr = 20
-    clusivity='mostly_excl'
+    clusivity='mostly_incl'
+    writeback_clean = True
+    replacement_policy = TreePLRURP()
 
 class L3Cache(Cache):
-    tag_latency = 2
-    data_latency = 4
-    response_latency = 4
+    tag_latency = 5
+    data_latency = 5
+    response_latency = 30
     mshrs = 64
     tgts_per_mshr = 20
     clusivity='mostly_excl'
+    replacement_policy = TreePLRURP()
 
 class IOCache(Cache):
     assoc = 8
